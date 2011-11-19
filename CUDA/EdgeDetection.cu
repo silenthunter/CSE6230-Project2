@@ -33,7 +33,6 @@ __device__ float GetGaussVal(int x, int y)
 
 __device__ float GetPixel(int cur, int x, int y)
 {
-	return 1.f;
 	if((int)(threadIdx.x) - x < 0 && blockIdx.x == 0) return imageBuf[cur];
 	if(/*threadIdx.x + x >= blockDim.x ||*/ blockIdx.x >= gridDim.x - 1) return imageBuf[cur];
 	
@@ -43,7 +42,7 @@ __device__ float GetPixel(int cur, int x, int y)
 	int idx = cur + x + y * width;
 	//if(idx < 0) return image[0];
 	//if(idx >= 1024 * 768) return image[0];
-	return imageBuf[cur];
+	return imageBuf[idx];
 }
 
 __device__ float GaussianBlur(int x, int y)
