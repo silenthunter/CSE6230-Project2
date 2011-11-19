@@ -22,7 +22,8 @@ __global__ void MakeBW(float* d_image, float* d_bw, int d_width)
 	width = d_width;
 	image = d_bw;
 	//TODO: Make local shared array to maximize speed
-	int dest = threadIdx.x + threadIdx.y  * width;
+	int dest = (threadIdx.x + threadIdx.y * blockDim.x) + 
+		(blockIdx.x + blockIdx.y * gridDim.x) * (blockDim.x * blockDim.y);
 	int idx = dest * 3;//3 color values
 
 	//http://www.bobpowell.net/grayscale.htm
@@ -53,7 +54,7 @@ int main(int argc, char* argv[])
 	dim3 blockSize(gaussSize, gaussSize);
 	dim3 gridSize(1,1);
 	ComputeGuassian<<<gridSize, blockSize>>>(d_gaussMat, gaussSize);
-	cudaThreadSynchronize();
+	//cudaThreadSynchronize();
 	cudaMemcpy(h_gaussMat, d_gaussMat, sizeof(float) * gaussSize * gaussSize, cudaMemcpyDeviceToHost);
 	for(int i = 0; i < gaussSize * gaussSize; i++)
 	{
@@ -65,10 +66,29 @@ int main(int argc, char* argv[])
 	BITMAPINFOHEADER bmpInfo;
 	BITMAPFILEHEADER bitmapHeader;
 	unsigned char* cImage = LoadBitmapFile("../Images/sample.bmp", &bitmapHeader, &bmpInfo);
+	int imageSize = bmpInfo.biSizeImage;
 
-	//float* h_image, d_image;
-	//int imageSize = 1;
-	//cudaMalloc((void**)&d_image, sizeof(float) * imageSize);
+	float *h_image, *d_image, *d_bw, *h_bw;
+	h_image = (float*)malloc(sizeof(float) * imageSize);
+	for(int i = 0; i < imageSize; i++)
+		h_image[i] = (float)cImage[i] / 256.0f;
+	
+	cudaMalloc((void**)&d_image, sizeof(float) * imageSize);
+	cudaMalloc((void**)&d_bw, sizeof(float) * imageSize / 3);
+	cudaMemcpy(d_image, h_image, sizeof(float) * imageSize, cudaMemcpyHostToDevice);
+	
+	blockSize = dim3(32, 16);
+	gridSize = dim3(32, 48);
+	MakeBW<<<gridSize, blockSize>>>(d_image, d_bw, bmpInfo.biWidth);
+	h_bw = (float*)malloc(sizeof(float) * imageSize);
+	cudaThreadSynchronize();
+	cudaMemcpy(h_bw, d_bw, sizeof(float) * imageSize / 3, cudaMemcpyDeviceToHost);
+	
+	printf("%f\n", h_bw[0]);
+	for(int i = 0; i < imageSize; i++)
+	{
+		cImage[i] = (unsigned char)(h_bw[i / 3] * 256);
+	}
 	
 	SaveBitmapFile("sample.bmp", cImage, &bitmapHeader, &bmpInfo);
 }

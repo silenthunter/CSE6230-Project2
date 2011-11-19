@@ -92,7 +92,6 @@ void SaveBitmapFile(char* filename, unsigned char *bitmapImage, BITMAPFILEHEADER
 
 	//read in the bitmap image data
 	fwrite(bitmapImage,1,bitmapInfoHeader->biSizeImage,filePtr);
-	printf("%d\n", bitmapInfoHeader->biSizeImage);
 
 	//close file and return bitmap iamge data
 	fclose(filePtr);
