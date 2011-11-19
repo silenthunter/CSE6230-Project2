@@ -16,6 +16,8 @@ __device__ int gaussWidth;
 __device__ float *image;
 __device__ float *imageBuf;
 __device__ int width;
+__device__ float Kgx[9] = {-1, 0, 1, -2, 0, 2, -1, 0, 1};
+__device__ float Kgy[9] = {1, 2, 1, 0, 0, 0, -1, -2, -1};
 
 __device__ int GetIdx()
 {
@@ -29,6 +31,20 @@ __device__ float GetGaussVal(int x, int y)
 	x += gaussWidth / 2;
 	y += gaussWidth / 2;
 	return GaussMat[x + y * gaussWidth];
+}
+
+__device__ float GetSobelValX(int x, int y)
+{
+	x += 1;
+	y += 1;
+	return Kgx[x + y * 3];
+}
+
+__device__ float GetSobelValY(int x, int y)
+{
+	x += 1;
+	y += 1;
+	return Kgy[x + y * 3];
 }
 
 __device__ float GetPixel(int cur, int x, int y)
@@ -116,6 +132,31 @@ __global__ void GaussianBlur()
 	
 }
 
+__global__ void CopyToBuffer()
+{
+	int idx = GetIdx();
+	imageBuf[idx] = image[idx];
+}
+
+__global__ void FindGradient()
+{
+	int i, j;
+	int idx = GetIdx();
+	float Gx = 0, Gy = 0;
+	
+	
+ 	for( i = -1; i <= 1; i++)
+	{
+		for( j = -1; j <= 1; j++)
+		{
+			Gx += GetPixel(idx, i, j) * GetSobelValX(i, j);
+			Gy += GetPixel(idx, i, j) * GetSobelValY(i, j);
+		}
+	}
+	
+	image[idx] = sqrt(powf(Gx, 2) + powf(Gy, 2));//atan(abs(Gy) / abs(Gx));
+}
+
 int main(int argc, char* argv[])
 {
 	//Have the card compute the matrix for the gaussion blur
@@ -158,6 +199,10 @@ int main(int argc, char* argv[])
 	
 	//Blur the image
 	GaussianBlur<<<gridSize, blockSize>>>();
+	cudaThreadSynchronize();
+	CopyToBuffer<<<gridSize, blockSize>>>();
+	cudaThreadSynchronize();
+	FindGradient<<<gridSize, blockSize>>>();
 	h_bw = (float*)malloc(sizeof(float) * imageSize);
 	cudaThreadSynchronize();
 	cudaMemcpy(h_bw, d_bw, sizeof(float) * imageSize / 3, cudaMemcpyDeviceToHost);
