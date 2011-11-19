@@ -1,6 +1,7 @@
 #include<cuda.h>
 #include<stdlib.h>
 #include<stdio.h>
+#include "bmpLoader.cu"
 
 __device__ float e = 2.71828f;
 __device__ float PI = 3.14f;
@@ -59,8 +60,15 @@ int main(int argc, char* argv[])
 		printf("%f ", h_gaussMat[i]);
 		if(i % 3 == 2) printf("\n");
 	}
+	
+	//Load an image
+	BITMAPINFOHEADER bmpInfo;
+	BITMAPFILEHEADER bitmapHeader;
+	unsigned char* cImage = LoadBitmapFile("../Images/sample.bmp", &bitmapHeader, &bmpInfo);
 
 	//float* h_image, d_image;
 	//int imageSize = 1;
 	//cudaMalloc((void**)&d_image, sizeof(float) * imageSize);
+	
+	SaveBitmapFile("sample.bmp", cImage, &bitmapHeader, &bmpInfo);
 }
