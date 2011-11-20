@@ -8,6 +8,9 @@ const int cuda_threadX = 32;
 const int cuda_threadY = 16;
 const int gaussSize = 3;
 
+__device__ const float lowThreshold = .1f;
+__device__ const float  highThreshold = .3f;
+
 __device__ float e = 2.71828f;
 __device__ float PI = 3.14f;
 __device__ float dev = 1.4f;
@@ -207,6 +210,9 @@ __global__ void Suppression()
 		else
 			image[idx] = imageBuf[idx];
 	}
+	
+	if(image[idx] > highThreshold) image[idx] = 0.95f;
+	else if (image[idx] > lowThreshold) image[idx] = .5f;
 }
 
 int main(int argc, char* argv[])
