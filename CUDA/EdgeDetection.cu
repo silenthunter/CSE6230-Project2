@@ -15,9 +15,11 @@ __device__ float *GaussMat;
 __device__ int gaussWidth;
 __device__ float *image;
 __device__ float *imageBuf;
+__device__ float *angles;
 __device__ int width;
 __device__ float Kgx[9] = {-1, 0, 1, -2, 0, 2, -1, 0, 1};
 __device__ float Kgy[9] = {1, 2, 1, 0, 0, 0, -1, -2, -1};
+extern __shared__ float shared[];
 
 __device__ int GetIdx()
 {
@@ -68,7 +70,7 @@ __device__ float GaussianBlur(int x, int y)
 	return p2;
 }
 
-__global__ void MakeBW(float* d_image, float* d_bw, float* d_buf, int d_width)
+__global__ void MakeBW(float* d_image, float* d_bw, float* d_buf, float* d_angles, int d_width)
 {	
 	//TODO: Make local shared array to maximize speed
 	int dest = GetIdx();
@@ -83,6 +85,7 @@ __global__ void MakeBW(float* d_image, float* d_bw, float* d_buf, int d_width)
 		image = d_bw;
 		width = d_width;
 		imageBuf = d_buf;
+		angles = d_angles;
 	}
 
 	d_bw[dest] = val;
@@ -144,7 +147,6 @@ __global__ void FindGradient()
 	int idx = GetIdx();
 	float Gx = 0, Gy = 0;
 	
-	
  	for( i = -1; i <= 1; i++)
 	{
 		for( j = -1; j <= 1; j++)
@@ -154,7 +156,57 @@ __global__ void FindGradient()
 		}
 	}
 	
-	image[idx] = sqrt(powf(Gx, 2) + powf(Gy, 2));//atan(abs(Gy) / abs(Gx));
+	syncthreads();
+	image[idx] = sqrt(powf(Gx, 2) + powf(Gy, 2));
+	angles[idx] = atan(abs(Gy) / abs(Gx));
+}
+
+__global__ void Suppression()
+{
+	const float step =PI / 4;
+	int idx = GetIdx();
+	int count = 0;//Use an int to store angle. Better for comparison than float
+	float angle = 0;
+	
+	for(float i = 0; i < 2 * PI; i += step, count++)
+	{
+		if(angles[idx] - i < 0 || angles[idx] - 1 < step / 2)
+		{
+			angle = count;
+			break;
+		}
+	}
+	
+	//syncthreads();
+	
+	if(angle == 0 || angle == 4)// Up and down
+	{
+		if(GetPixel(idx, 0, 1) > imageBuf[idx] || GetPixel(idx, 0, -1) > imageBuf[idx])
+			image[idx] = 0;
+		else
+			image[idx] = imageBuf[idx];
+	}
+	else if(angle == 1 || angle == 5) // UR and DL
+	{
+		if(GetPixel(idx, 1, 1) > imageBuf[idx] || GetPixel(idx, -1, -1) > imageBuf[idx])
+			image[idx] = 0;
+		else
+			image[idx] = imageBuf[idx];
+	}
+	else if(angle == 2 || angle == 6) // Left and Right
+	{
+		if(GetPixel(idx, 1, 0) > imageBuf[idx] || GetPixel(idx, -1, 0) > imageBuf[idx])
+			image[idx] = 0;
+		else
+			image[idx] = imageBuf[idx];
+	}
+	else if(angle == 3 || angle == 7) // UL and DR
+	{
+		if(GetPixel(idx, -1, 1) > imageBuf[idx] || GetPixel(idx, 1, -1) > imageBuf[idx])
+			image[idx] = 0;
+		else
+			image[idx] = imageBuf[idx];
+	}
 }
 
 int main(int argc, char* argv[])
@@ -178,10 +230,10 @@ int main(int argc, char* argv[])
 	//Load an image
 	BITMAPINFOHEADER bmpInfo;
 	BITMAPFILEHEADER bitmapHeader;
-	unsigned char* cImage = LoadBitmapFile("../Images/sample.bmp", &bitmapHeader, &bmpInfo);
+	unsigned char* cImage = LoadBitmapFile("../Images/SOFIANASA.bmp", &bitmapHeader, &bmpInfo);
 	int imageSize = bmpInfo.biSizeImage;
 
-	float *h_image, *d_image, *d_buf, *d_bw, *h_bw;
+	float *h_image, *d_image, *d_buf, *d_angles, *d_bw, *h_bw;
 	h_image = (float*)malloc(sizeof(float) * imageSize);
 	for(int i = 0; i < imageSize; i++)
 		h_image[i] = (float)cImage[i] / 256.0f;
@@ -189,12 +241,13 @@ int main(int argc, char* argv[])
 	cudaMalloc((void**)&d_image, sizeof(float) * imageSize);
 	cudaMalloc((void**)&d_bw, sizeof(float) * imageSize / 3);
 	cudaMalloc((void**)&d_buf, sizeof(float) * imageSize / 3);
+	cudaMalloc((void**)&d_angles, sizeof(float) * imageSize / 3);
 	cudaMemcpy(d_image, h_image, sizeof(float) * imageSize, cudaMemcpyHostToDevice);
 	
 	//Convert the image into black and white
 	blockSize = dim3(cuda_threadX, cuda_threadY);
 	gridSize = dim3(bmpInfo.biWidth / cuda_threadX, bmpInfo.biHeight / cuda_threadY);
-	MakeBW<<<gridSize, blockSize>>>(d_image, d_bw, d_buf, bmpInfo.biWidth);
+	MakeBW<<<gridSize, blockSize>>>(d_image, d_bw, d_buf, d_angles, bmpInfo.biWidth);
 	cudaThreadSynchronize();
 	
 	//Blur the image
@@ -202,9 +255,18 @@ int main(int argc, char* argv[])
 	cudaThreadSynchronize();
 	CopyToBuffer<<<gridSize, blockSize>>>();
 	cudaThreadSynchronize();
-	FindGradient<<<gridSize, blockSize>>>();
-	h_bw = (float*)malloc(sizeof(float) * imageSize);
+	
+	//Find the gradients
+	FindGradient<<<gridSize, blockSize, sizeof(float) * 512>>>();
 	cudaThreadSynchronize();
+	CopyToBuffer<<<gridSize, blockSize>>>();
+	cudaThreadSynchronize();
+	
+	//Non-Maximum suppression
+	Suppression<<<gridSize, blockSize>>>();
+	cudaThreadSynchronize();
+	
+	h_bw = (float*)malloc(sizeof(float) * imageSize);
 	cudaMemcpy(h_bw, d_bw, sizeof(float) * imageSize / 3, cudaMemcpyDeviceToHost);
 	
 	for(int i = 0; i < imageSize; i++)
@@ -214,5 +276,5 @@ int main(int argc, char* argv[])
 	
 	printf("%s\n", cudaGetErrorString(cudaGetLastError()));
 	
-	SaveBitmapFile("sample.bmp", cImage, &bitmapHeader, &bmpInfo);
+	SaveBitmapFile("SOFIANASA.bmp", cImage, &bitmapHeader, &bmpInfo);
 }
