@@ -20,9 +20,9 @@ __device__ float *image;
 __device__ float *imageBuf;
 __device__ float *angles;
 __device__ int width;
+__device__ int height;
 __device__ float Kgx[9] = {-1, 0, 1, -2, 0, 2, -1, 0, 1};
 __device__ float Kgy[9] = {1, 2, 1, 0, 0, 0, -1, -2, -1};
-extern __shared__ float shared[];
 
 __device__ int GetIdx()
 {
@@ -55,10 +55,10 @@ __device__ float GetSobelValY(int x, int y)
 __device__ float GetPixel(int cur, int x, int y)
 {
 	if((int)(threadIdx.x) - x < 0 && blockIdx.x == 0) return imageBuf[cur];
-	if(/*threadIdx.x + x >= blockDim.x ||*/ blockIdx.x >= gridDim.x - 1) return imageBuf[cur];
+	if(/*threadIdx.x + x >= blockDim.x ||*/ blockIdx.x >= gridDim.x) return imageBuf[cur];
 	
 	if((int)(threadIdx.y) - y < 0 && blockIdx.y == 0) return imageBuf[cur];
-	if(/*threadIdx.y + y >= blockDim.y ||*/ blockIdx.y >= gridDim.y - 1) return imageBuf[cur];
+	if(/*threadIdx.y + y >= blockDim.y ||*/ blockIdx.y >= gridDim.y) return imageBuf[cur];
 	
 	int idx = cur + x + y * width;
 	//if(idx < 0) return image[0];
@@ -73,7 +73,7 @@ __device__ float GaussianBlur(int x, int y)
 	return p2;
 }
 
-__global__ void MakeBW(float* d_image, float* d_bw, float* d_buf, float* d_angles, int d_width)
+__global__ void MakeBW(float* d_image, float* d_bw, float* d_buf, float* d_angles, int d_width, int d_height)
 {	
 	//TODO: Make local shared array to maximize speed
 	int dest = GetIdx();
@@ -87,6 +87,7 @@ __global__ void MakeBW(float* d_image, float* d_bw, float* d_buf, float* d_angle
 	{
 		image = d_bw;
 		width = d_width;
+		height = d_height;
 		imageBuf = d_buf;
 		angles = d_angles;
 	}
@@ -161,49 +162,50 @@ __global__ void FindGradient()
 	
 	syncthreads();
 	image[idx] = sqrt(powf(Gx, 2) + powf(Gy, 2));
-	angles[idx] = atan(abs(Gy) / abs(Gx));
+	angles[idx] = atanf(abs(Gy) / abs(Gx));
 }
 
 __global__ void Suppression()
 {
-	const float step =PI / 4;
+	const float step = PI / 4;
 	int idx = GetIdx();
 	int count = 0;//Use an int to store angle. Better for comparison than float
-	float angle = 0;
+	int angle = 0;
 	
-	for(float i = 0; i < 2 * PI; i += step, count++)
+	for(float i = -PI / 2; i < PI / 2; i += step, count++)
 	{
-		if(angles[idx] - i < 0 || angles[idx] - 1 < step / 2)
+		if(angles[idx] - i < step / 2)
 		{
 			angle = count;
+			angles[idx] = count;
 			break;
 		}
 	}
 	
 	//syncthreads();
 	
-	if(angle == 0 || angle == 4)// Up and down
+	if(angle == 2)// Up and down
 	{
 		if(GetPixel(idx, 0, 1) > imageBuf[idx] || GetPixel(idx, 0, -1) > imageBuf[idx])
 			image[idx] = 0;
 		else
 			image[idx] = imageBuf[idx];
 	}
-	else if(angle == 1 || angle == 5) // UR and DL
+	else if(angle == 3) // UR and DL
 	{
 		if(GetPixel(idx, 1, 1) > imageBuf[idx] || GetPixel(idx, -1, -1) > imageBuf[idx])
 			image[idx] = 0;
 		else
 			image[idx] = imageBuf[idx];
 	}
-	else if(angle == 2 || angle == 6) // Left and Right
+	else if(angle == 0) // Left and Right
 	{
 		if(GetPixel(idx, 1, 0) > imageBuf[idx] || GetPixel(idx, -1, 0) > imageBuf[idx])
 			image[idx] = 0;
 		else
 			image[idx] = imageBuf[idx];
 	}
-	else if(angle == 3 || angle == 7) // UL and DR
+	else if(angle == 1) // UL and DR
 	{
 		if(GetPixel(idx, -1, 1) > imageBuf[idx] || GetPixel(idx, 1, -1) > imageBuf[idx])
 			image[idx] = 0;
@@ -213,6 +215,27 @@ __global__ void Suppression()
 	
 	if(image[idx] > highThreshold) image[idx] = 0.95f;
 	else if (image[idx] > lowThreshold) image[idx] = .5f;
+	else image[idx] = 0;
+}
+
+__global__ void hysteresis()
+{
+	int idx = GetIdx();
+	image[idx] = 0;
+	
+	if(imageBuf[idx] <= .8f) return;//Ignore weak thresholds at first
+	
+	//Make sure it doesn't loop back into an already covered path
+	while(imageBuf[idx] != 0 && image[idx] == 0)
+	{
+		image[idx] = imageBuf[idx];
+		if(angles[idx] == 0) idx += 1;
+		else if(angles[idx] == 1) idx -= width - 1;
+		else if(angles[idx] == 2) idx -= width;
+		else if(angles[idx] == 3) idx += width - 1;
+	}
+	
+	if(idx < 0 || idx > width * height) return;
 }
 
 int main(int argc, char* argv[])
@@ -249,11 +272,12 @@ int main(int argc, char* argv[])
 	cudaMalloc((void**)&d_buf, sizeof(float) * imageSize / 3);
 	cudaMalloc((void**)&d_angles, sizeof(float) * imageSize / 3);
 	cudaMemcpy(d_image, h_image, sizeof(float) * imageSize, cudaMemcpyHostToDevice);
+	printf("%s\n", cudaGetErrorString(cudaGetLastError()));
 	
 	//Convert the image into black and white
 	blockSize = dim3(cuda_threadX, cuda_threadY);
 	gridSize = dim3(bmpInfo.biWidth / cuda_threadX, bmpInfo.biHeight / cuda_threadY);
-	MakeBW<<<gridSize, blockSize>>>(d_image, d_bw, d_buf, d_angles, bmpInfo.biWidth);
+	MakeBW<<<gridSize, blockSize>>>(d_image, d_bw, d_buf, d_angles, bmpInfo.biWidth, bmpInfo.biHeight);
 	cudaThreadSynchronize();
 	
 	//Blur the image
@@ -263,13 +287,19 @@ int main(int argc, char* argv[])
 	cudaThreadSynchronize();
 	
 	//Find the gradients
-	FindGradient<<<gridSize, blockSize, sizeof(float) * 512>>>();
+	FindGradient<<<gridSize, blockSize>>>();
 	cudaThreadSynchronize();
 	CopyToBuffer<<<gridSize, blockSize>>>();
 	cudaThreadSynchronize();
 	
 	//Non-Maximum suppression
 	Suppression<<<gridSize, blockSize>>>();
+	cudaThreadSynchronize();
+	CopyToBuffer<<<gridSize, blockSize>>>();
+	cudaThreadSynchronize();
+	
+	//hysteresis 
+	hysteresis<<<gridSize, blockSize>>>();
 	cudaThreadSynchronize();
 	
 	h_bw = (float*)malloc(sizeof(float) * imageSize);
