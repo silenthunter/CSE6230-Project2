@@ -240,6 +240,11 @@ __global__ void hysteresis()
 
 int main(int argc, char* argv[])
 {
+	cudaEvent_t start, stop;
+	float timer;
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+
 	//Have the card compute the matrix for the gaussion blur
 	float* d_gaussMat;
 	float* h_gaussMat = (float*)malloc(sizeof(float) * gaussSize * gaussSize);
@@ -259,7 +264,7 @@ int main(int argc, char* argv[])
 	//Load an image
 	BITMAPINFOHEADER bmpInfo;
 	BITMAPFILEHEADER bitmapHeader;
-	unsigned char* cImage = LoadBitmapFile("../Images/SOFIANASA.bmp", &bitmapHeader, &bmpInfo);
+	unsigned char* cImage = LoadBitmapFile("../Images/GT.bmp", &bitmapHeader, &bmpInfo);
 	int imageSize = bmpInfo.biSizeImage;
 
 	float *h_image, *d_image, *d_buf, *d_angles, *d_bw, *h_bw;
@@ -267,38 +272,62 @@ int main(int argc, char* argv[])
 	for(int i = 0; i < imageSize; i++)
 		h_image[i] = (float)cImage[i] / 256.0f;
 	
+	cudaEventRecord(start, 0);
 	cudaMalloc((void**)&d_image, sizeof(float) * imageSize);
 	cudaMalloc((void**)&d_bw, sizeof(float) * imageSize / 3);
 	cudaMalloc((void**)&d_buf, sizeof(float) * imageSize / 3);
 	cudaMalloc((void**)&d_angles, sizeof(float) * imageSize / 3);
 	cudaMemcpy(d_image, h_image, sizeof(float) * imageSize, cudaMemcpyHostToDevice);
+	
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime(&timer, start, stop);
+	printf("Load time: %f ms\n", timer);
+	
 	printf("%s\n", cudaGetErrorString(cudaGetLastError()));
 	
 	//Convert the image into black and white
+	cudaEventRecord(start, 0);
 	blockSize = dim3(cuda_threadX, cuda_threadY);
 	gridSize = dim3(bmpInfo.biWidth / cuda_threadX, bmpInfo.biHeight / cuda_threadY);
 	MakeBW<<<gridSize, blockSize>>>(d_image, d_bw, d_buf, d_angles, bmpInfo.biWidth, bmpInfo.biHeight);
 	cudaThreadSynchronize();
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime(&timer, start, stop);
+	printf("BW time: %f ms\n", timer);
 	
 	//Blur the image
+	cudaEventRecord(start, 0);
 	GaussianBlur<<<gridSize, blockSize>>>();
 	cudaThreadSynchronize();
 	CopyToBuffer<<<gridSize, blockSize>>>();
 	cudaThreadSynchronize();
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime(&timer, start, stop);
+	printf("Blur time: %f ms\n", timer);
 	
 	//Find the gradients
+	cudaEventRecord(start, 0);
 	FindGradient<<<gridSize, blockSize>>>();
 	cudaThreadSynchronize();
 	CopyToBuffer<<<gridSize, blockSize>>>();
 	cudaThreadSynchronize();
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime(&timer, start, stop);
+	printf("Gradient time: %f ms\n", timer);
 	
 	//Non-Maximum suppression
+	cudaEventRecord(start, 0);
 	Suppression<<<gridSize, blockSize>>>();
 	cudaThreadSynchronize();
 	CopyToBuffer<<<gridSize, blockSize>>>();
 	cudaThreadSynchronize();
 	
 	//hysteresis 
+	cudaEventRecord(start, 0);
 	hysteresis<<<gridSize, blockSize>>>();
 	cudaThreadSynchronize();
 	
@@ -312,5 +341,5 @@ int main(int argc, char* argv[])
 	
 	printf("%s\n", cudaGetErrorString(cudaGetLastError()));
 	
-	SaveBitmapFile("SOFIANASA.bmp", cImage, &bitmapHeader, &bmpInfo);
+	SaveBitmapFile("GT.bmp", cImage, &bitmapHeader, &bmpInfo);
 }
