@@ -254,6 +254,8 @@ __global__ void hysteresis()
 
 int main(int argc, char* argv[])
 {
+	
+	printf("%s\n", argv[0]);
 	cudaEvent_t start, stop;
 	float timer;
 	cudaEventCreate(&start);
@@ -269,19 +271,21 @@ int main(int argc, char* argv[])
 	ComputeGuassian<<<gridSize, blockSize>>>(d_gaussMat, gaussSize);
 	//cudaThreadSynchronize();
 	cudaMemcpy(h_gaussMat, d_gaussMat, sizeof(float) * gaussSize * gaussSize, cudaMemcpyDeviceToHost);
+	printf("%s\n", cudaGetErrorString(cudaGetLastError()));
 	for(int i = 0; i < gaussSize * gaussSize; i++)
 	{
 		printf("%f ", h_gaussMat[i]);
 		if(i % 3 == 2) printf("\n");
 	}
+	printf("%s\n", cudaGetErrorString(cudaGetLastError()));
 	
 	//Load an image
 	BITMAPINFOHEADER bmpInfo;
 	BITMAPFILEHEADER bitmapHeader;
 	unsigned char* cImage = LoadBitmapFile("../Images/GT.bmp", &bitmapHeader, &bmpInfo);
 	int imageSize = bmpInfo.biSizeImage;
-
 	float *h_image, *d_image, *d_buf, *d_angles, *d_bw, *h_bw;
+
 	h_image = (float*)malloc(sizeof(float) * imageSize);
 	for(int i = 0; i < imageSize; i++)
 		h_image[i] = (float)cImage[i] / 256.0f;
@@ -295,6 +299,7 @@ int main(int argc, char* argv[])
 	cudaMalloc((void**)&d_buf, sizeof(float) * imageSize / 3);
 	cudaMalloc((void**)&d_angles, sizeof(float) * imageSize / 3);
 	cudaMemcpy(d_image, h_image, sizeof(float) * imageSize, cudaMemcpyHostToDevice);
+	printf("%s\n", cudaGetErrorString(cudaGetLastError()));
 	
 	cudaEventRecord(stop, 0);
 	cudaEventSynchronize(stop);
@@ -360,5 +365,5 @@ int main(int argc, char* argv[])
 	
 	printf("%s\n", cudaGetErrorString(cudaGetLastError()));
 	
-	SaveBitmapFile("GT.bmp", cImage, &bitmapHeader, &bmpInfo);
+	//SaveBitmapFile("GT.bmp", cImage, &bitmapHeader, &bmpInfo);
 }
