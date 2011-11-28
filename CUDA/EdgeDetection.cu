@@ -23,6 +23,7 @@ __device__ int width;
 __device__ int height;
 __device__ float Kgx[9] = {-1, 0, 1, -2, 0, 2, -1, 0, 1};
 __device__ float Kgy[9] = {1, 2, 1, 0, 0, 0, -1, -2, -1};
+extern __shared__ float shared[];
 
 __device__ int GetIdx()
 {
@@ -54,16 +55,17 @@ __device__ float GetSobelValY(int x, int y)
 
 __device__ float GetPixel(int cur, int x, int y)
 {
-	if((int)(threadIdx.x) - x < 0 && blockIdx.x == 0) return imageBuf[cur];
-	if(/*threadIdx.x + x >= blockDim.x ||*/ blockIdx.x >= gridDim.x) return imageBuf[cur];
+	cur = threadIdx.x + threadIdx.y * blockDim.x;
+	if((int)(threadIdx.x) - x < 0) return shared[cur];
+	if(threadIdx.x + x >= blockDim.x) return shared[cur];
 	
-	if((int)(threadIdx.y) - y < 0 && blockIdx.y == 0) return imageBuf[cur];
-	if(/*threadIdx.y + y >= blockDim.y ||*/ blockIdx.y >= gridDim.y) return imageBuf[cur];
+	if((int)(threadIdx.y) - y < 0) return shared[cur];
+	if(threadIdx.y + y >= blockDim.y) return shared[cur];
 	
-	int idx = cur + x + y * width;
+	int idx = cur + x + y * blockDim.x;
 	//if(idx < 0) return image[0];
 	//if(idx >= 1024 * 768) return image[0];
-	return imageBuf[idx];
+	return shared[idx];
 }
 
 __device__ float GaussianBlur(int x, int y)
@@ -125,7 +127,11 @@ __global__ void GaussianBlur()
 {
 	int i, j;
 	int idx = GetIdx();
+	int localIdx = threadIdx.x + threadIdx.y * blockDim.x;
 	float val = 0;
+	
+	shared[localIdx] = image[idx];
+	syncthreads();
 	
  	for( i = -gaussWidth / 2; i <= gaussWidth / 2; i++)
 	{
@@ -149,7 +155,11 @@ __global__ void FindGradient()
 {
 	int i, j;
 	int idx = GetIdx();
+	int localIdx = threadIdx.x + threadIdx.y * blockDim.x;
 	float Gx = 0, Gy = 0;
+	
+	shared[localIdx] = image[idx];
+	syncthreads();
 	
  	for( i = -1; i <= 1; i++)
 	{
@@ -169,8 +179,12 @@ __global__ void Suppression()
 {
 	const float step = PI / 4;
 	int idx = GetIdx();
+	int localIdx = threadIdx.x + threadIdx.y * blockDim.x;
 	int count = 0;//Use an int to store angle. Better for comparison than float
 	int angle = 0;
+	
+	shared[localIdx] = image[idx];
+	syncthreads();
 	
 	for(float i = -PI / 2; i < PI / 2; i += step, count++)
 	{
@@ -271,6 +285,9 @@ int main(int argc, char* argv[])
 	h_image = (float*)malloc(sizeof(float) * imageSize);
 	for(int i = 0; i < imageSize; i++)
 		h_image[i] = (float)cImage[i] / 256.0f;
+		
+	int sharedSize = sizeof(float) * cuda_threadX * cuda_threadY;
+	printf("Share size: %d\n", sharedSize);
 	
 	cudaEventRecord(start, 0);
 	cudaMalloc((void**)&d_image, sizeof(float) * imageSize);
@@ -296,10 +313,11 @@ int main(int argc, char* argv[])
 	cudaEventSynchronize(stop);
 	cudaEventElapsedTime(&timer, start, stop);
 	printf("BW time: %f ms\n", timer);
+	printf("%s\n", cudaGetErrorString(cudaGetLastError()));
 	
 	//Blur the image
 	cudaEventRecord(start, 0);
-	GaussianBlur<<<gridSize, blockSize>>>();
+	GaussianBlur<<<gridSize, blockSize, sharedSize>>>();
 	cudaThreadSynchronize();
 	CopyToBuffer<<<gridSize, blockSize>>>();
 	cudaThreadSynchronize();
@@ -307,10 +325,11 @@ int main(int argc, char* argv[])
 	cudaEventSynchronize(stop);
 	cudaEventElapsedTime(&timer, start, stop);
 	printf("Blur time: %f ms\n", timer);
+	printf("%s\n", cudaGetErrorString(cudaGetLastError()));
 	
 	//Find the gradients
 	cudaEventRecord(start, 0);
-	FindGradient<<<gridSize, blockSize>>>();
+	FindGradient<<<gridSize, blockSize, sharedSize>>>();
 	cudaThreadSynchronize();
 	CopyToBuffer<<<gridSize, blockSize>>>();
 	cudaThreadSynchronize();
@@ -321,15 +340,15 @@ int main(int argc, char* argv[])
 	
 	//Non-Maximum suppression
 	cudaEventRecord(start, 0);
-	Suppression<<<gridSize, blockSize>>>();
+	Suppression<<<gridSize, blockSize, sharedSize>>>();
 	cudaThreadSynchronize();
 	CopyToBuffer<<<gridSize, blockSize>>>();
 	cudaThreadSynchronize();
 	
 	//hysteresis 
-	cudaEventRecord(start, 0);
+	/*cudaEventRecord(start, 0);
 	hysteresis<<<gridSize, blockSize>>>();
-	cudaThreadSynchronize();
+	cudaThreadSynchronize();*/
 	
 	h_bw = (float*)malloc(sizeof(float) * imageSize);
 	cudaMemcpy(h_bw, d_bw, sizeof(float) * imageSize / 3, cudaMemcpyDeviceToHost);
