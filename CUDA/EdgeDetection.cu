@@ -16,6 +16,7 @@ __device__ float PI = 3.14f;
 __device__ float dev = 1.4f;
 __device__ float *GaussMat;
 __device__ int gaussWidth;
+__device__ int halfGauss;
 __device__ float *image;
 __device__ float *imageBuf;
 __device__ float *angles;
@@ -55,14 +56,14 @@ __device__ float GetSobelValY(int x, int y)
 
 __device__ float GetPixel(int cur, int x, int y)
 {
-	cur = threadIdx.x + threadIdx.y * blockDim.x;
-	if((int)(threadIdx.x) - x < 0) return shared[cur];
-	if(threadIdx.x + x >= blockDim.x) return shared[cur];
+	cur = threadIdx.x + threadIdx.y * (blockDim.x + halfGauss * 2) + halfGauss;
+	if((int)(threadIdx.x) - x < -halfGauss) return shared[cur];
+	if(threadIdx.x + x >= blockDim.x + halfGauss) return shared[cur];
 	
-	if((int)(threadIdx.y) - y < 0) return shared[cur];
-	if(threadIdx.y + y >= blockDim.y) return shared[cur];
+	if((int)(threadIdx.y) - y < -halfGauss) return shared[cur];
+	if(threadIdx.y + y >= blockDim.y + halfGauss) return shared[cur];
 	
-	int idx = cur + x + y * blockDim.x;
+	int idx = cur + x + y * (blockDim.x + halfGauss * 2);
 	//if(idx < 0) return image[0];
 	//if(idx >= 1024 * 768) return image[0];
 	return shared[idx];
@@ -105,6 +106,7 @@ __global__ void ComputeGuassian(float* d_gaussMat, int width)
 	if(idx == 0)
 	{
 		gaussWidth = width;
+		halfGauss = width / 2;
 		GaussMat = d_gaussMat;
 	}
 	float val = GaussianBlur(threadIdx.x - width / 2, threadIdx.y - width / 2);
@@ -123,15 +125,46 @@ __global__ void ComputeGuassian(float* d_gaussMat, int width)
 	d_gaussMat[idx] = val / matSum;
 }
 
+__device__ void CopyToShared()
+{
+	int idx = GetIdx();
+	int localIdx = threadIdx.x + threadIdx.y * (blockDim.x + halfGauss * 2) + halfGauss;
+	int lWidth = halfGauss + threadIdx.x;
+	
+	shared[localIdx] = image[idx];
+	if(blockIdx.x != 0 || blockIdx.y != 0)
+	if(threadIdx.x == 0 && threadIdx.y == 0)
+	{
+	
+	}
+	else if(threadIdx.x == 0)
+	{
+		for(int i = -halfGauss; i < 0; i++) shared[localIdx - i] = image[idx - i];
+	}
+	else if(threadIdx.y == 0)
+	{
+		for(int i = -halfGauss; i < 0; i++) shared[localIdx - i * lWidth] = image[idx - i * lWidth];
+	}
+	
+	//if(blockDim.x ==
+	if(threadIdx.y == blockDim.y - 1 && threadIdx.x == blockDim.x - 1)
+	{
+	}
+	else if(threadIdx.y == blockDim.y - 1)
+	{
+	}
+	else if(threadIdx.x == blockDim.x - 1)
+	{
+	}
+	syncthreads();
+}
+
 __global__ void GaussianBlur()
 {
 	int i, j;
 	int idx = GetIdx();
-	int localIdx = threadIdx.x + threadIdx.y * blockDim.x;
 	float val = 0;
-	
-	shared[localIdx] = image[idx];
-	syncthreads();
+	CopyToShared();
 	
  	for( i = -gaussWidth / 2; i <= gaussWidth / 2; i++)
 	{
@@ -155,11 +188,9 @@ __global__ void FindGradient()
 {
 	int i, j;
 	int idx = GetIdx();
-	int localIdx = threadIdx.x + threadIdx.y * blockDim.x;
 	float Gx = 0, Gy = 0;
 	
-	shared[localIdx] = image[idx];
-	syncthreads();
+	CopyToShared();
 	
  	for( i = -1; i <= 1; i++)
 	{
@@ -179,12 +210,10 @@ __global__ void Suppression()
 {
 	const float step = PI / 4;
 	int idx = GetIdx();
-	int localIdx = threadIdx.x + threadIdx.y * blockDim.x;
 	int count = 0;//Use an int to store angle. Better for comparison than float
 	int angle = 0;
 	
-	shared[localIdx] = image[idx];
-	syncthreads();
+	CopyToShared();
 	
 	for(float i = -PI / 2; i < PI / 2; i += step, count++)
 	{
@@ -290,7 +319,8 @@ int main(int argc, char* argv[])
 	for(int i = 0; i < imageSize; i++)
 		h_image[i] = (float)cImage[i] / 256.0f;
 		
-	int sharedSize = sizeof(float) * cuda_threadX * cuda_threadY;
+	//divide first to get the floor
+	int sharedSize = sizeof(float) * (cuda_threadX + gaussSize) * (cuda_threadY + gaussSize);
 	printf("Share size: %d\n", sharedSize);
 	
 	cudaEventRecord(start, 0);
@@ -333,7 +363,7 @@ int main(int argc, char* argv[])
 	printf("%s\n", cudaGetErrorString(cudaGetLastError()));
 	
 	//Find the gradients
-	cudaEventRecord(start, 0);
+	/*cudaEventRecord(start, 0);
 	FindGradient<<<gridSize, blockSize, sharedSize>>>();
 	cudaThreadSynchronize();
 	CopyToBuffer<<<gridSize, blockSize>>>();
@@ -365,5 +395,5 @@ int main(int argc, char* argv[])
 	
 	printf("%s\n", cudaGetErrorString(cudaGetLastError()));
 	
-	//SaveBitmapFile("GT.bmp", cImage, &bitmapHeader, &bmpInfo);
+	SaveBitmapFile("GT.bmp", cImage, &bitmapHeader, &bmpInfo);
 }
