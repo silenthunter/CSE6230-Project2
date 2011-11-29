@@ -56,12 +56,12 @@ __device__ float GetSobelValY(int x, int y)
 
 __device__ float GetPixel(int cur, int x, int y)
 {
-	cur = threadIdx.x + threadIdx.y * (blockDim.x + halfGauss * 2) + halfGauss;
-	if((int)(threadIdx.x) - x < -halfGauss) return shared[cur];
-	if(threadIdx.x + x >= blockDim.x + halfGauss) return shared[cur];
+	cur = threadIdx.x + (threadIdx.y + halfGauss) * (blockDim.x + halfGauss * 2) + halfGauss;
+	if((int)(threadIdx.x) - x < -0) return shared[cur];
+	if(threadIdx.x + x >= blockDim.x + 0) return shared[cur];
 	
-	if((int)(threadIdx.y) - y < -halfGauss) return shared[cur];
-	if(threadIdx.y + y >= blockDim.y + halfGauss) return shared[cur];
+	if((int)(threadIdx.y) - y < 0) return shared[cur];
+	if(threadIdx.y + y >= blockDim.y + 0) return shared[cur];
 	
 	int idx = cur + x + y * (blockDim.x + halfGauss * 2);
 	//if(idx < 0) return image[0];
@@ -128,34 +128,53 @@ __global__ void ComputeGuassian(float* d_gaussMat, int width)
 __device__ void CopyToShared()
 {
 	int idx = GetIdx();
-	int localIdx = threadIdx.x + threadIdx.y * (blockDim.x + halfGauss * 2) + halfGauss;
-	int lWidth = halfGauss + threadIdx.x;
+	int lWidth = 2 * halfGauss + blockDim.x;
+	int localIdx = threadIdx.x + (threadIdx.y + halfGauss) * (blockDim.x + halfGauss * 2) + halfGauss;
 	
-	shared[localIdx] = image[idx];
-	if(blockIdx.x != 0 || blockIdx.y != 0)
-	if(threadIdx.x == 0 && threadIdx.y == 0)
-	{
+	shared[localIdx] = imageBuf[idx];
 	
-	}
-	else if(threadIdx.x == 0)
+	/*if(threadIdx.x == 0 && threadIdx.y == 0)
 	{
-		for(int i = -halfGauss; i < 0; i++) shared[localIdx - i] = image[idx - i];
-	}
-	else if(threadIdx.y == 0)
+		for(int i = 0; i < (int)blockDim.x; i++)
+		{
+			for(int j = 0; j < (int)blockDim.y; j++)
+			{
+				//shared[localIdx + i + j * lWidth] = imageBuf[idx + i + j * width];
+				shared[localIdx + j * lWidth + i] = imageBuf[idx + j * width + i];
+			}
+		}
+	}*/
+	
+	/*if(threadIdx.x == 0 && threadIdx.y == 0 && blockIdx.x != 0 && blockIdx.y != 0)
 	{
-		for(int i = -halfGauss; i < 0; i++) shared[localIdx - i * lWidth] = image[idx - i * lWidth];
+		for(int i = -halfGauss; i < 0; i++)
+			for(int j = -halfGauss; j < 0; j++)
+				shared[localIdx + i + j * lWidth] = imageBuf[idx + i + j * width];
+	}
+	else if(threadIdx.x == 0 && blockIdx.x != 0)
+	{
+		for(int i = -halfGauss; i < 0; i++) shared[localIdx + i] = imageBuf[idx + i];
+	}
+	else if(threadIdx.y == 0 && blockIdx.y != 0)
+	{
+		for(int i = -halfGauss; i < 0; i++) shared[localIdx + i * lWidth] = imageBuf[idx + i * width];
 	}
 	
-	//if(blockDim.x ==
-	if(threadIdx.y == blockDim.y - 1 && threadIdx.x == blockDim.x - 1)
+	else if(threadIdx.y == blockDim.y - 1 && threadIdx.x == blockDim.x - 1
+		&& blockDim.x != gridDim.x - 1  && blockDim.y != gridDim.y - 1)
 	{
+		for(int i = 1; i <= halfGauss; i++)
+			for(int j = 1; j <= halfGauss; j++)
+				shared[localIdx + i + j * lWidth] = imageBuf[idx + i + j * width];
 	}
 	else if(threadIdx.y == blockDim.y - 1)
 	{
+		for(int i = 1; i <= halfGauss; i++) shared[localIdx + i * lWidth] = imageBuf[idx + i * width];
 	}
 	else if(threadIdx.x == blockDim.x - 1)
 	{
-	}
+		for(int i = 1; i <= halfGauss; i++) shared[localIdx + i] = imageBuf[idx + i];
+	}*/
 	syncthreads();
 }
 
@@ -163,12 +182,12 @@ __global__ void GaussianBlur()
 {
 	int i, j;
 	int idx = GetIdx();
-	float val = 0;
 	CopyToShared();
+	float val = 0;//GetPixel(idx, 0, 0) * .999f;
 	
- 	for( i = -gaussWidth / 2; i <= gaussWidth / 2; i++)
+ 	for( i = -halfGauss; i <= halfGauss; i++)
 	{
-		for( j = -gaussWidth / 2; j <= gaussWidth / 2; j++)
+		for( j = -halfGauss; j <= halfGauss; j++)
 		{
 			val += GetPixel(idx, i, j) * GetGaussVal(i, j);
 		}
