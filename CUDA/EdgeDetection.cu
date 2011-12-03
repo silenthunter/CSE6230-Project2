@@ -28,8 +28,8 @@ extern __shared__ float shared[];
 
 __device__ int GetIdx()
 {
-	int idx = (threadIdx.x + threadIdx.y * blockDim.x) + 
-		(blockIdx.x + blockIdx.y * gridDim.x) * (blockDim.x * blockDim.y);
+	int idx = (threadIdx.x + blockDim.x * blockIdx.x) + (threadIdx.y + blockIdx.y * blockDim.y) *
+		blockDim.x * gridDim.x;
 	return idx;
 }
 
@@ -382,7 +382,7 @@ int main(int argc, char* argv[])
 	printf("%s\n", cudaGetErrorString(cudaGetLastError()));
 	
 	//Find the gradients
-	/*cudaEventRecord(start, 0);
+	cudaEventRecord(start, 0);
 	FindGradient<<<gridSize, blockSize, sharedSize>>>();
 	cudaThreadSynchronize();
 	CopyToBuffer<<<gridSize, blockSize>>>();
