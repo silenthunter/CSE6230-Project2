@@ -57,15 +57,8 @@ __device__ float GetSobelValY(int x, int y)
 __device__ float GetPixel(int cur, int x, int y)
 {
 	cur = threadIdx.x + (threadIdx.y + halfGauss) * (blockDim.x + halfGauss * 2) + halfGauss;
-	if((int)(threadIdx.x) - x < -0) return shared[cur];
-	if(threadIdx.x + x >= blockDim.x + 0) return shared[cur];
-	
-	if((int)(threadIdx.y) - y < 0) return shared[cur];
-	if(threadIdx.y + y >= blockDim.y + 0) return shared[cur];
-	
 	int idx = cur + x + y * (blockDim.x + halfGauss * 2);
-	//if(idx < 0) return image[0];
-	//if(idx >= 1024 * 768) return image[0];
+
 	return shared[idx];
 }
 
@@ -135,9 +128,9 @@ __device__ void CopyToShared()
 	
 	/*if(threadIdx.x == 0 && threadIdx.y == 0)
 	{
-		for(int i = 0; i < (int)blockDim.x; i++)
+		for(int i = -halfGauss; i < (int)blockDim.x + halfGauss; i++)
 		{
-			for(int j = 0; j < (int)blockDim.y; j++)
+			for(int j = -halfGauss; j < (int)blockDim.y + halfGauss; j++)
 			{
 				//shared[localIdx + i + j * lWidth] = imageBuf[idx + i + j * width];
 				shared[localIdx + j * lWidth + i] = imageBuf[idx + j * width + i];
@@ -145,13 +138,38 @@ __device__ void CopyToShared()
 		}
 	}*/
 	
-	/*if(threadIdx.x == 0 && threadIdx.y == 0 && blockIdx.x != 0 && blockIdx.y != 0)
+	//Corners
+	//UL
+	if(threadIdx.x == 0 && threadIdx.y == 0 && blockIdx.x != 0 && blockIdx.y != 0)
 	{
-		for(int i = -halfGauss; i < 0; i++)
-			for(int j = -halfGauss; j < 0; j++)
-				shared[localIdx + i + j * lWidth] = imageBuf[idx + i + j * width];
+		//for(int i = -halfGauss; i <= 0; i++)
+			//shared[localIdx + i + i * lWidth] = imageBuf[idx + i + i * width];
+		shared[0] = imageBuf[idx - 1 - width];
 	}
-	else if(threadIdx.x == 0 && blockIdx.x != 0)
+	//BR
+	if(threadIdx.y == blockDim.y - 1 && threadIdx.x == blockDim.x - 1
+		&& blockIdx.x != gridDim.x - 1  && blockIdx.y != gridDim.y - 1)
+	{
+		for(int i = 1; i <= halfGauss; i++)
+			shared[localIdx + i + i * lWidth] = imageBuf[idx + i + i * width];
+	}
+	//UR
+	if(threadIdx.y == 0 && threadIdx.x == blockDim.x - 1 &&
+		blockIdx.y != 0 && blockIdx.x != gridDim.x - 1)
+	{
+		for(int i = 1, j = -1; i <= halfGauss; i++, j--)
+			shared[localIdx + i + j * lWidth] = imageBuf[idx + i + j * width];
+	}
+	//BL
+	if(threadIdx.y == blockDim.y - 1 && threadIdx.x == 0 &&
+		blockIdx.y != gridDim.y - 1 && blockIdx.x != 0)
+	{
+		for(int i = -halfGauss, j = halfGauss; i <= 0; i++, j--)
+			shared[localIdx + i + j * lWidth] = imageBuf[idx + i + j * width];
+	}
+	
+	//Edges
+	if(threadIdx.x == 0 && blockIdx.x != 0)
 	{
 		for(int i = -halfGauss; i < 0; i++) shared[localIdx + i] = imageBuf[idx + i];
 	}
@@ -159,22 +177,14 @@ __device__ void CopyToShared()
 	{
 		for(int i = -halfGauss; i < 0; i++) shared[localIdx + i * lWidth] = imageBuf[idx + i * width];
 	}
-	
-	else if(threadIdx.y == blockDim.y - 1 && threadIdx.x == blockDim.x - 1
-		&& blockDim.x != gridDim.x - 1  && blockDim.y != gridDim.y - 1)
-	{
-		for(int i = 1; i <= halfGauss; i++)
-			for(int j = 1; j <= halfGauss; j++)
-				shared[localIdx + i + j * lWidth] = imageBuf[idx + i + j * width];
-	}
-	else if(threadIdx.y == blockDim.y - 1)
+	else if(threadIdx.y == blockDim.y - 1 && blockIdx.y != gridDim.y - 1)
 	{
 		for(int i = 1; i <= halfGauss; i++) shared[localIdx + i * lWidth] = imageBuf[idx + i * width];
 	}
-	else if(threadIdx.x == blockDim.x - 1)
+	else if(threadIdx.x == blockDim.x - 1 && blockIdx.x != gridDim.x - 1)
 	{
 		for(int i = 1; i <= halfGauss; i++) shared[localIdx + i] = imageBuf[idx + i];
-	}*/
+	}
 	syncthreads();
 }
 
