@@ -33,6 +33,13 @@ __device__ int GetIdx()
 	return idx;
 }
 
+__device__ int GetIdxBlock()
+{
+	int idx = (threadIdx.x + threadIdx.y * blockDim.x) +
+		(blockIdx.x + blockIdx.y * gridDim.x) * (blockDim.x * blockDim.y);
+	return idx;
+}
+
 __device__ float GetGaussVal(int x, int y)
 {
 	x += gaussWidth / 2;
@@ -54,12 +61,24 @@ __device__ float GetSobelValY(int x, int y)
 	return Kgy[x + y * 3];
 }
 
-__device__ float GetPixel(int cur, int x, int y)
+__device__ float GetPixel(int cur, int x = 0, int y = 0)
 {
 	cur = threadIdx.x + (threadIdx.y + halfGauss) * (blockDim.x + halfGauss * 2) + halfGauss;
 	int idx = cur + x + y * (blockDim.x + halfGauss * 2);
 
 	return shared[idx];
+}
+
+__device__ float GetPixelGlobal(int cur, int x = 0, int y = 0)
+{
+	if((int)(threadIdx.x) - x < 0 && blockIdx.x == 0) return imageBuf[cur];
+	if(/*threadIdx.x + x >= blockDim.x ||*/ blockIdx.x >= gridDim.x) return imageBuf[cur];
+
+	if((int)(threadIdx.y) - y < 0 && blockIdx.y == 0) return imageBuf[cur];
+	if(/*threadIdx.y + y >= blockDim.y ||*/ blockIdx.y >= gridDim.y) return imageBuf[cur];
+
+	int idx = cur + x + y * width;
+	return imageBuf[idx];
 }
 
 __device__ float GaussianBlur(int x, int y)
@@ -238,11 +257,10 @@ __global__ void FindGradient()
 __global__ void Suppression()
 {
 	const float step = PI / 4;
-	int idx = GetIdx();
+	int idx = GetIdxBlock();
 	int count = 0;//Use an int to store angle. Better for comparison than float
 	int angle = 0;
-	
-	CopyToShared();
+	float imgBuf = GetPixelGlobal(idx);
 	
 	for(float i = -PI / 2; i < PI / 2; i += step, count++)
 	{
@@ -254,35 +272,33 @@ __global__ void Suppression()
 		}
 	}
 	
-	//syncthreads();
-	
 	if(angle == 2)// Up and down
 	{
-		if(GetPixel(idx, 0, 1) > imageBuf[idx] || GetPixel(idx, 0, -1) > imageBuf[idx])
+		if(GetPixelGlobal(idx, 0, 1) > imgBuf || GetPixelGlobal(idx, 0, -1) > imgBuf)
 			image[idx] = 0;
 		else
-			image[idx] = imageBuf[idx];
+			image[idx] = imgBuf;
 	}
 	else if(angle == 3) // UR and DL
 	{
-		if(GetPixel(idx, 1, 1) > imageBuf[idx] || GetPixel(idx, -1, -1) > imageBuf[idx])
+		if(GetPixelGlobal(idx, 1, 1) > imgBuf || GetPixelGlobal(idx, -1, -1) > imgBuf)
 			image[idx] = 0;
 		else
-			image[idx] = imageBuf[idx];
+			image[idx] = imgBuf;
 	}
 	else if(angle == 0) // Left and Right
 	{
-		if(GetPixel(idx, 1, 0) > imageBuf[idx] || GetPixel(idx, -1, 0) > imageBuf[idx])
+		if(GetPixelGlobal(idx, 1, 0) > imgBuf || GetPixelGlobal(idx, -1, 0) > imgBuf)
 			image[idx] = 0;
 		else
-			image[idx] = imageBuf[idx];
+			image[idx] = imgBuf;
 	}
 	else if(angle == 1) // UL and DR
 	{
-		if(GetPixel(idx, -1, 1) > imageBuf[idx] || GetPixel(idx, 1, -1) > imageBuf[idx])
+		if(GetPixelGlobal(idx, -1, 1) > imgBuf || GetPixelGlobal(idx, 1, -1) > imgBuf)
 			image[idx] = 0;
 		else
-			image[idx] = imageBuf[idx];
+			image[idx] = imgBuf;
 	}
 	
 	if(image[idx] > highThreshold) image[idx] = 0.95f;
@@ -404,7 +420,7 @@ int main(int argc, char* argv[])
 	
 	//Non-Maximum suppression
 	cudaEventRecord(start, 0);
-	Suppression<<<gridSize, blockSize, sharedSize>>>();
+	Suppression<<<gridSize, blockSize>>>();
 	cudaThreadSynchronize();
 	CopyToBuffer<<<gridSize, blockSize>>>();
 	cudaThreadSynchronize();
