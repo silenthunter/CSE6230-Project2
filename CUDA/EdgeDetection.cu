@@ -333,7 +333,15 @@ __global__ void hysteresis()
 int main(int argc, char* argv[])
 {
 	
-	printf("%s\n", argv[0]);
+	
+	if(argc < 2)
+	{
+		printf("Usage: %s <Image name>", argv[0]);
+		return -1;
+	}
+	char imageLocation[512];
+	sprintf(imageLocation, "../Images/%s", argv[1]);
+	
 	cudaEvent_t start, stop;
 	float timer;
 	cudaEventCreate(&start);
@@ -360,7 +368,7 @@ int main(int argc, char* argv[])
 	//Load an image
 	BITMAPINFOHEADER bmpInfo;
 	BITMAPFILEHEADER bitmapHeader;
-	unsigned char* cImage = LoadBitmapFile("../Images/GT.bmp", &bitmapHeader, &bmpInfo);
+	unsigned char* cImage = LoadBitmapFile(imageLocation, &bitmapHeader, &bmpInfo);
 	int imageSize = bmpInfo.biSizeImage;
 	float *h_image, *d_image, *d_buf, *d_angles, *d_bw, *h_bw;
 
@@ -444,5 +452,5 @@ int main(int argc, char* argv[])
 	
 	printf("%s\n", cudaGetErrorString(cudaGetLastError()));
 	
-	SaveBitmapFile("GT.bmp", cImage, &bitmapHeader, &bmpInfo);
+	SaveBitmapFile(argv[1], cImage, &bitmapHeader, &bmpInfo);
 }
