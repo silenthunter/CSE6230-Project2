@@ -1,10 +1,20 @@
 <!DOCTYPE cpj>
 <cpj version="1.2" >
  <session>
-  <name>Session2</name>
+  <name>Unoptimized</name>
   <progpath>"G:/Git/CSE6230-Project2/CUDA/edge.exe"</progpath>
   <workdirpath>G:/Git/CSE6230-Project2/CUDA</workdirpath>
   <datetime>26 Nov 2011 20:24:52</datetime>
+  <normalizedcounter>false</normalizedcounter>
+  <device id="0" label="Device_0" >
+   <context totalcountercount="0" invalidcountercount="0" id="0" label="Context_0" truncatedcountercount="0" />
+  </device>
+ </session>
+ <session>
+  <name>Optimized</name>
+  <progpath>"G:/Git/CSE6230-Project2/CUDA/edge.exe"</progpath>
+  <workdirpath>G:/Git/CSE6230-Project2/CUDA</workdirpath>
+  <datetime>03 Dec 2011 21:53:36</datetime>
   <normalizedcounter>false</normalizedcounter>
   <device id="0" label="Device_0" >
    <context totalcountercount="0" invalidcountercount="0" id="0" label="Context_0" truncatedcountercount="0" />

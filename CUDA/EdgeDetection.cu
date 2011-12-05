@@ -161,30 +161,33 @@ __device__ void CopyToShared()
 	//UL
 	if(threadIdx.x == 0 && threadIdx.y == 0 && blockIdx.x != 0 && blockIdx.y != 0)
 	{
-		//for(int i = -halfGauss; i <= 0; i++)
-			//shared[localIdx + i + i * lWidth] = imageBuf[idx + i + i * width];
-		shared[0] = imageBuf[idx - 1 - width];
+		for(int i = -halfGauss; i <= 0; i++)
+			for(int j = -halfGauss; j <= 0; j++)
+				shared[localIdx + i + j * lWidth] = imageBuf[idx + i + j * width];
 	}
 	//BR
 	if(threadIdx.y == blockDim.y - 1 && threadIdx.x == blockDim.x - 1
 		&& blockIdx.x != gridDim.x - 1  && blockIdx.y != gridDim.y - 1)
 	{
-		for(int i = 1; i <= halfGauss; i++)
-			shared[localIdx + i + i * lWidth] = imageBuf[idx + i + i * width];
+		for(int i = 0; i <= halfGauss; i++)
+			for(int j = 0; j <= halfGauss; j++)
+				shared[localIdx + i + j * lWidth] = imageBuf[idx + i + j * width];
 	}
 	//UR
 	if(threadIdx.y == 0 && threadIdx.x == blockDim.x - 1 &&
 		blockIdx.y != 0 && blockIdx.x != gridDim.x - 1)
 	{
-		for(int i = 1, j = -1; i <= halfGauss; i++, j--)
-			shared[localIdx + i + j * lWidth] = imageBuf[idx + i + j * width];
+		for(int i = 0; i <= halfGauss; i++)
+			for(int j = -halfGauss; j <= 0; j++)
+				shared[localIdx + i + j * lWidth] = imageBuf[idx + i + j * width];
 	}
 	//BL
 	if(threadIdx.y == blockDim.y - 1 && threadIdx.x == 0 &&
 		blockIdx.y != gridDim.y - 1 && blockIdx.x != 0)
 	{
-		for(int i = -halfGauss, j = halfGauss; i <= 0; i++, j--)
-			shared[localIdx + i + j * lWidth] = imageBuf[idx + i + j * width];
+		for(int i = -halfGauss; i <= 0; i++)
+			for(int j = 0; j <= halfGauss; j++)
+				shared[localIdx + i + j * lWidth] = imageBuf[idx + i + j * width];
 	}
 	
 	//Edges
@@ -260,7 +263,6 @@ __global__ void Suppression()
 	int idx = GetIdxBlock();
 	int count = 0;//Use an int to store angle. Better for comparison than float
 	int angle = 0;
-	float imgBuf = GetPixelGlobal(idx);
 	
 	for(float i = -PI / 2; i < PI / 2; i += step, count++)
 	{
@@ -272,33 +274,35 @@ __global__ void Suppression()
 		}
 	}
 	
+	//syncthreads();
+	
 	if(angle == 2)// Up and down
 	{
-		if(GetPixelGlobal(idx, 0, 1) > imgBuf || GetPixelGlobal(idx, 0, -1) > imgBuf)
+		if(GetPixelGlobal(idx, 0, 1) > imageBuf[idx] || GetPixelGlobal(idx, 0, -1) > imageBuf[idx])
 			image[idx] = 0;
 		else
-			image[idx] = imgBuf;
+			image[idx] = imageBuf[idx];
 	}
 	else if(angle == 3) // UR and DL
 	{
-		if(GetPixelGlobal(idx, 1, 1) > imgBuf || GetPixelGlobal(idx, -1, -1) > imgBuf)
+		if(GetPixelGlobal(idx, 1, 1) > imageBuf[idx] || GetPixelGlobal(idx, -1, -1) > imageBuf[idx])
 			image[idx] = 0;
 		else
-			image[idx] = imgBuf;
+			image[idx] = imageBuf[idx];
 	}
 	else if(angle == 0) // Left and Right
 	{
-		if(GetPixelGlobal(idx, 1, 0) > imgBuf || GetPixelGlobal(idx, -1, 0) > imgBuf)
+		if(GetPixelGlobal(idx, 1, 0) > imageBuf[idx] || GetPixelGlobal(idx, -1, 0) > imageBuf[idx])
 			image[idx] = 0;
 		else
-			image[idx] = imgBuf;
+			image[idx] = imageBuf[idx];
 	}
 	else if(angle == 1) // UL and DR
 	{
-		if(GetPixelGlobal(idx, -1, 1) > imgBuf || GetPixelGlobal(idx, 1, -1) > imgBuf)
+		if(GetPixelGlobal(idx, -1, 1) > imageBuf[idx] || GetPixelGlobal(idx, 1, -1) > imageBuf[idx])
 			image[idx] = 0;
 		else
-			image[idx] = imgBuf;
+			image[idx] = imageBuf[idx];
 	}
 	
 	if(image[idx] > highThreshold) image[idx] = 0.95f;
