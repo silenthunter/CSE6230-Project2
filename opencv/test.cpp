@@ -4,6 +4,8 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
+#include <sys/time.h>
+
 using namespace std;
 using namespace cv;
 
@@ -17,6 +19,9 @@ int aperature_size = 3;
 
 int main(int argc, char** argv)
 {
+  struct timeval start_time;
+  struct timeval stop_time;
+
   if (argc != 2)
   {
     cout << "Usage: " << argv[0] << " " << "IMAGE" << endl;
@@ -37,7 +42,9 @@ int main(int argc, char** argv)
   blur( src_gray, detected_edges, Size(5,5) );
 
   /// Canny detector
+  gettimeofday(&start_time, NULL);
   Canny( detected_edges, detected_edges, lowThreshold, highThreshold, aperature_size );
+  gettimeofday(&stop_time, NULL);
 
   /// Using Canny's output as a mask, we display our result
   //dst = Scalar::all(0);
@@ -48,6 +55,9 @@ int main(int argc, char** argv)
 
   //imwrite("output.jpg", thr_detected_edges);
   imwrite("output.jpg", detected_edges);
+
+  cout <<"Canny filter time: " << ((stop_time.tv_sec - start_time.tv_sec) * 1000 +
+      (stop_time.tv_usec - start_time.tv_usec)) << " us" << endl;
 
   return 0;
 }
