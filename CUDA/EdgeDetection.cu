@@ -438,9 +438,9 @@ int main(int argc, char* argv[])
 	cudaThreadSynchronize();
 	
 	//hysteresis 
-	/*cudaEventRecord(start, 0);
+	cudaEventRecord(start, 0);
 	hysteresis<<<gridSize, blockSize>>>();
-	cudaThreadSynchronize();*/
+	cudaThreadSynchronize();
 	
 	h_bw = (float*)malloc(sizeof(float) * imageSize);
 	cudaMemcpy(h_bw, d_bw, sizeof(float) * imageSize / 3, cudaMemcpyDeviceToHost);
