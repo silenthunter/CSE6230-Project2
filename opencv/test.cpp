@@ -39,7 +39,7 @@ int main(int argc, char** argv)
   cout << "Image loaded" << endl << flush;
   gettimeofday(&time_2, NULL);
 
-  cout <<"Image load time: " << ((time_2.tv_sec - time_1.tv_sec) * 1000 +
+  cout <<"Image load time: " << ((time_2.tv_sec - time_1.tv_sec) * 1000000 +
       (time_2.tv_usec - time_1.tv_usec)) << " us" << endl;
 
   // Convert to grayscale
@@ -48,7 +48,7 @@ int main(int argc, char** argv)
   dst.create(src_gray.size(), src_gray.type());
   gettimeofday(&time_2, NULL);
 
-  cout <<"Image convert to grayscale time: " << ((time_2.tv_sec - time_1.tv_sec) * 1000 +
+  cout <<"Image convert to grayscale time: " << ((time_2.tv_sec - time_1.tv_sec) * 1000000 +
       (time_2.tv_usec - time_1.tv_usec)) << " us" << endl;
 
   /// Reduce noise with a 3x3 grid
@@ -56,7 +56,7 @@ int main(int argc, char** argv)
   blur( src_gray, detected_edges, Size(5,5) );
   gettimeofday(&time_2, NULL);
 
-  cout <<"Image blur time: " << ((time_2.tv_sec - time_1.tv_sec) * 1000 +
+  cout <<"Image blur time: " << ((time_2.tv_sec - time_1.tv_sec) * 1000000 +
       (time_2.tv_usec - time_1.tv_usec)) << " us" << endl;
 
   /// Canny detector
@@ -64,7 +64,7 @@ int main(int argc, char** argv)
   Canny( detected_edges, detected_edges, lowThreshold, highThreshold, aperature_size );
   gettimeofday(&time_2, NULL);
 
-  cout <<"Canny filter time: " << ((time_2.tv_sec - time_1.tv_sec) * 1000 +
+  cout <<"Canny filter time: " << ((time_2.tv_sec - time_1.tv_sec) * 1000000 +
       (time_2.tv_usec - time_1.tv_usec)) << " us" << endl;
 
   imwrite(outfilename, detected_edges);
