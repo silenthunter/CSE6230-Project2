@@ -36,7 +36,7 @@ int main(int argc, char** argv)
   src = imread(filename);
 
   gettimeofday(&time_1, NULL);
-  cout << "Image loaded" << endl << flush;
+  cout << "Image loaded (" << filename << ")" << endl << flush;
   gettimeofday(&time_2, NULL);
 
   cout <<"Image load time: " << ((time_2.tv_sec - time_1.tv_sec) * 1000000 +
