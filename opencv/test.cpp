@@ -19,8 +19,8 @@ int aperature_size = 3;
 
 int main(int argc, char** argv)
 {
-  struct timeval start_time;
-  struct timeval stop_time;
+  struct timeval time_1;
+  struct timeval time_2;
 
   if (argc != 2)
   {
@@ -29,35 +29,45 @@ int main(int argc, char** argv)
   }
 
   string filename = argv[1];
+  string outfilename = string("e-") + filename;
+
+  // Image load
 
   src = imread(filename);
 
+  gettimeofday(&time_1, NULL);
   cout << "Image loaded" << endl << flush;
+  gettimeofday(&time_2, NULL);
+
+  cout <<"Image load time: " << ((time_2.tv_sec - time_1.tv_sec) * 1000 +
+      (time_2.tv_usec - time_1.tv_usec)) << " us" << endl;
 
   // Convert to grayscale
+  gettimeofday(&time_1, NULL);
   cvtColor(src, src_gray, CV_RGB2GRAY);
   dst.create(src_gray.size(), src_gray.type());
+  gettimeofday(&time_2, NULL);
 
-  /// Reduce noise with a kernel 3x3
+  cout <<"Image convert to grayscale time: " << ((time_2.tv_sec - time_1.tv_sec) * 1000 +
+      (time_2.tv_usec - time_1.tv_usec)) << " us" << endl;
+
+  /// Reduce noise with a 3x3 grid
+  gettimeofday(&time_1, NULL);
   blur( src_gray, detected_edges, Size(5,5) );
+  gettimeofday(&time_2, NULL);
+
+  cout <<"Image blur time: " << ((time_2.tv_sec - time_1.tv_sec) * 1000 +
+      (time_2.tv_usec - time_1.tv_usec)) << " us" << endl;
 
   /// Canny detector
-  gettimeofday(&start_time, NULL);
+  gettimeofday(&time_1, NULL);
   Canny( detected_edges, detected_edges, lowThreshold, highThreshold, aperature_size );
-  gettimeofday(&stop_time, NULL);
+  gettimeofday(&time_2, NULL);
 
-  /// Using Canny's output as a mask, we display our result
-  //dst = Scalar::all(0);
+  cout <<"Canny filter time: " << ((time_2.tv_sec - time_1.tv_sec) * 1000 +
+      (time_2.tv_usec - time_1.tv_usec)) << " us" << endl;
 
-  //src_gray.copyTo( dst, detected_edges);
-
-
-
-  //imwrite("output.jpg", thr_detected_edges);
-  imwrite("output.jpg", detected_edges);
-
-  cout <<"Canny filter time: " << ((stop_time.tv_sec - start_time.tv_sec) * 1000 +
-      (stop_time.tv_usec - start_time.tv_usec)) << " us" << endl;
+  imwrite(outfilename, detected_edges);
 
   return 0;
 }
