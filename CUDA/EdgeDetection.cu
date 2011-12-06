@@ -1,6 +1,7 @@
 #include<cuda.h>
 #include<stdlib.h>
 #include<stdio.h>
+#include<sys/time.h>
 #include "bmpLoader.cu"
 
 //Program constants
@@ -330,9 +331,17 @@ __global__ void hysteresis()
 	if(idx < 0 || idx > width * height) return;
 }
 
+//http://cboard.cprogramming.com/c-programming/106025-clock-vs-gettimeofday.html
+long long int toddiff(struct timeval *tod1, struct timeval *tod2)
+{
+    long long t1, t2;
+    t1 = tod1->tv_sec * 1000000 + tod1->tv_usec;
+    t2 = tod2->tv_sec * 1000000 + tod2->tv_usec;
+    return t2 - t1;
+}
+
 int main(int argc, char* argv[])
 {
-	
 	
 	if(argc < 2)
 	{
@@ -343,6 +352,8 @@ int main(int argc, char* argv[])
 	sprintf(imageLocation, "../Images/%s", argv[1]);
 	
 	cudaEvent_t start, stop;
+	struct timeval tv, tv2;
+	struct timeval tvNoCopy, tvNoCopy2;
 	float timer;
 	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
@@ -381,6 +392,7 @@ int main(int argc, char* argv[])
 	printf("Share size: %d\n", sharedSize);
 	
 	cudaEventRecord(start, 0);
+	gettimeofday(&tv, NULL);
 	cudaMalloc((void**)&d_image, sizeof(float) * imageSize);
 	cudaMalloc((void**)&d_bw, sizeof(float) * imageSize / 3);
 	cudaMalloc((void**)&d_buf, sizeof(float) * imageSize / 3);
@@ -388,6 +400,7 @@ int main(int argc, char* argv[])
 	cudaMemcpy(d_image, h_image, sizeof(float) * imageSize, cudaMemcpyHostToDevice);
 	printf("%s\n", cudaGetErrorString(cudaGetLastError()));
 	
+	gettimeofday(&tvNoCopy, NULL);
 	cudaEventRecord(stop, 0);
 	cudaEventSynchronize(stop);
 	cudaEventElapsedTime(&timer, start, stop);
@@ -400,7 +413,7 @@ int main(int argc, char* argv[])
 	blockSize = dim3(cuda_threadX, cuda_threadY);
 	gridSize = dim3(bmpInfo.biWidth / cuda_threadX, bmpInfo.biHeight / cuda_threadY);
 	MakeBW<<<gridSize, blockSize>>>(d_image, d_bw, d_buf, d_angles, bmpInfo.biWidth, bmpInfo.biHeight);
-	cudaThreadSynchronize();
+	//cudaThreadSynchronize();
 	cudaEventRecord(stop, 0);
 	cudaEventSynchronize(stop);
 	cudaEventElapsedTime(&timer, start, stop);
@@ -410,9 +423,9 @@ int main(int argc, char* argv[])
 	//Blur the image
 	cudaEventRecord(start, 0);
 	GaussianBlur<<<gridSize, blockSize, sharedSize>>>();
-	cudaThreadSynchronize();
+	//cudaThreadSynchronize();
 	CopyToBuffer<<<gridSize, blockSize>>>();
-	cudaThreadSynchronize();
+	//cudaThreadSynchronize();
 	cudaEventRecord(stop, 0);
 	cudaEventSynchronize(stop);
 	cudaEventElapsedTime(&timer, start, stop);
@@ -422,9 +435,9 @@ int main(int argc, char* argv[])
 	//Find the gradients
 	cudaEventRecord(start, 0);
 	FindGradient<<<gridSize, blockSize, sharedSize>>>();
-	cudaThreadSynchronize();
+	//cudaThreadSynchronize();
 	CopyToBuffer<<<gridSize, blockSize>>>();
-	cudaThreadSynchronize();
+	//cudaThreadSynchronize();
 	cudaEventRecord(stop, 0);
 	cudaEventSynchronize(stop);
 	cudaEventElapsedTime(&timer, start, stop);
@@ -433,24 +446,27 @@ int main(int argc, char* argv[])
 	//Non-Maximum suppression
 	cudaEventRecord(start, 0);
 	Suppression<<<gridSize, blockSize>>>();
-	cudaThreadSynchronize();
+	//cudaThreadSynchronize();
 	CopyToBuffer<<<gridSize, blockSize>>>();
-	cudaThreadSynchronize();
+	//cudaThreadSynchronize();
 	
 	//hysteresis 
 	cudaEventRecord(start, 0);
 	hysteresis<<<gridSize, blockSize>>>();
-	cudaThreadSynchronize();
+	//cudaThreadSynchronize();
+	gettimeofday(&tvNoCopy2, NULL);
 	
 	h_bw = (float*)malloc(sizeof(float) * imageSize);
 	cudaMemcpy(h_bw, d_bw, sizeof(float) * imageSize / 3, cudaMemcpyDeviceToHost);
 	
+	gettimeofday(&tv2, NULL);
 	for(int i = 0; i < imageSize; i++)
 	{
 		cImage[i] = (unsigned char)(h_bw[i / 3] * 256);
 	}
 	
 	printf("%s\n", cudaGetErrorString(cudaGetLastError()));
+	printf("Load: %lldus\nNo Load:%lldus\n", toddiff(&tv,&tv2), toddiff(&tvNoCopy, &tvNoCopy2));
 	
 	SaveBitmapFile(argv[1], cImage, &bitmapHeader, &bmpInfo);
 }
