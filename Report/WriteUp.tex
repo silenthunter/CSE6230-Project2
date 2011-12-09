@@ -54,7 +54,7 @@ The OpenCV computer vision library provides a single-threaded Canny CPU implemen
 
 \subsection{CUDA}
 
-Using a GTX 470 and using the averages of five runs we gathered detailed GPU and CPU times for events on both the naive and optimized versions of the code. In the Gaussian blur method we reduced the time needed by ~15\% and the number of global loads by ~40\%. Gradient detection’s time was reduced by ~46\% with the  number of global loads down by ~53\%.
+Using a GTX 470 and using the averages of five runs we gathered detailed GPU and CPU times for events on both the naive and optimized versions of the code. In the Gaussian blur method we reduced the time needed by ~15\% and the number of global loads by ~40\%. Gradient detection’s time was reduced by ~46\% with the  number of global loads down by ~53\%. This is shown in Table ~\ref{tab:timeChange} and Table ~\ref{tab:loadChange} respectively.
 
 \begin{table*}[]
 \centering
@@ -65,7 +65,7 @@ Gauss Blur & 10187.1$\mu$s & 8566.5$\mu$s & -15.90835468 \\ \hline
 Gradient & 22784.1$\mu$s & 12240.9$\mu$s & -46.27437555\\ \hline
 \end{tabular}
 \caption{Shows the difference in timing results between the naive and optimized version of the canny algorithm with CUDA}
-\label{tab:}
+\label{tab:timeChange}
 \end{table*}
 
 \begin{table*}[]
@@ -77,52 +77,75 @@ Gauss Blur & 846626 & 508759 & -39.907468 \\ \hline
 Gradient & 1557324 & 726993 & -53.3178067 \\ \hline
 \end{tabular}
 \caption{Shows the difference in global loads between the naive and optimized version of the canny algorithm with CUDA}
-\label{tab:}
+\label{tab:loadChange}
 \end{table*}
 
 \subsection{Test Images}
+\begin{figure*}[p]
+\centering
+\includegraphics[scale=.7]{gt.png}
+\includegraphics[scale=.35]{gtEdge.png}
+\caption{GT football image before and after edge detection}
+\label{fig:gtComp}
+\end{figure*}
+\begin{figure*}[p]
+\centering
+\includegraphics[scale=.35]{fisherFrog.png}
+\includegraphics[scale=.35]{fisherFrogEdge.png}
+\caption{Frog image before and after edge detection}
+\label{fig:fisherFrogComp}
+\end{figure*}
+\begin{figure*}[p]
+\centering
+\includegraphics[scale=.7]{vienna.png}
+\includegraphics[scale=.35]{viennaEdge.png}
+\caption{Vienna image before and after edge detection}
+\label{fig:viennaComp}
+\end{figure*}
+\begin{figure*}[p]
+\centering
+\includegraphics[scale=.7]{bench.png}
+\includegraphics[scale=.35]{benchEdge.png}
+\caption{Bench image before and after edge detection}
+\label{fig:benchComp}
+\end{figure*}
+
+\begin{figure}[p]
+\centering
+\includegraphics[scale=.35]{gtPerf.png}
+\caption{OpenCV versus CUDA performance on the GT football image}
+\label{fig:gtVS}
+\end{figure}
+\begin{figure}[p]
+\centering
+\includegraphics[scale=.35]{fisherFrogPerf.png}
+\caption{OpenCV versus CUDA performance on the frog image}
+\label{fig:fisherFrogVS}
+\end{figure}
+\begin{figure}[p]
+\centering
+\includegraphics[scale=.35]{viennaPerf.png}
+\caption{OpenCV versus CUDA performance on the Vienna image}
+\label{fig:viennaVS}
+\end{figure}
+\begin{figure}[p]
+\centering
+\includegraphics[scale=.35]{benchPerf.png}
+\caption{OpenCV versus CUDA performance on the bench image}
+\label{fig:benchVS}
+\end{figure}
+
 \begin{figure}[tb]
 \centering
 \includegraphics[scale=.35]{cudaNorm.png}
 \caption{CUDA timing normalized by filesize}
-\label{fig}
+\label{fig:CudaNorm}
 \end{figure}
 \begin{figure}[tb]
 \centering
 \includegraphics[scale=.35]{openCVNorm.png}
 \caption{OpenCV timing normalized by filesize}
-\label{fig}
-\end{figure}
-
-\begin{figure}[p]
-\centering
-\includegraphics[scale=.35]{gtPerf.png}
-\caption{OpenCV versus CUDA}
-\label{fig}
-\end{figure}
-\begin{figure}[p]
-\centering
-\includegraphics[scale=.35]{fisherFrogPerf.png}
-\caption{OpenCV versus CUDA}
-\label{fig}
-\end{figure}
-\begin{figure}[p]
-\centering
-\includegraphics[scale=.35]{leavesPerf.png}
-\caption{OpenCV versus CUDA}
-\label{fig}
-\end{figure}
-\begin{figure}[p]
-\centering
-\includegraphics[scale=.35]{viennaPerf.png}
-\caption{OpenCV versus CUDA}
-\label{fig}
-\end{figure}
-\begin{figure}[p]
-\centering
-\includegraphics[scale=.35]{benchPerf.png}
-\caption{OpenCV versus CUDA}
-\label{fig}
+\label{fig:OpenCVNorm}
 \end{figure}
 
 %fig. 1 - GT football
@@ -141,13 +164,13 @@ Gradient & 1557324 & 726993 & -53.3178067 \\ \hline
 %fig 12 vienna perf
 %fig 13 wooden bench perf
 
-Figures 1 and 2 present the performance results of the CUDA implementation and the OpenCV reference implementation.  The CUDA image conversions are each dominated by data transfers to load the original image and then unload the edge detected version.  The results of the load and unload operations show that the unload operation equals about 33\% of the load time.  This is because the original images are an RGB bitmap while the output is a gray scale image where each pixel represents a single byte as opposed to three.
+Figures ~\ref{fig:CudaNorm} and ~\ref{fig:OpenCVNorm} present the performance results of the CUDA implementation and the OpenCV reference implementation.  The CUDA image conversions are each dominated by data transfers to load the original image and then unload the edge detected version.  The results of the load and unload operations show that the unload operation equals about 33\% of the load time.  This is because the original images are an RGB bitmap while the output is a gray scale image where each pixel represents a single byte as opposed to three.
 
 The load and unload times required for CUDA is highly dependent on the bus architecture of the GPU card and whether the PCI Express lane is shared with other cards.  The test server provided on the Jinx cluster is described as having a PCI Express 2.0 16x interface.  From our research this card should support data transfers of 4000 MB/s.  Using the RGB fisherfrog image as an example, its size, s, of 36,636,726 bytes should require a minimum transfer time of s(3 bytes per pixel)/(4000)(1024)(1024), or 26 ms.  We observed the transfer to require 41 ms.
 
-While each of our test images varied in size (with GT, fisherfrog, and leaves each consuming 35 MB and vienna consuming 5.5 MB) Figure 7 shows that each of the image processing operations performed at nearly a constant rate.  We believe this is due to the optimized nature of CUDA and its ability to efficiently perform SIMD operations. The OpenCV implementation results shown in Figure 8 highlight the lack of efficiency achieved with a single-threaded, CPU.  The variation observed in the rate of the gradient calculation.
+While each of our test images varied in size (with GT, fisherfrog, and leaves each consuming 35 MB and vienna consuming 5.5 MB) Figure ~\ref{fig:CudaNorm} shows that each of the image processing operations performed at nearly a constant rate.  We believe this is due to the optimized nature of CUDA and its ability to efficiently perform SIMD operations. The OpenCV implementation results shown in Figure ~\ref{fig:OpenCVNorm} highlight the lack of efficiency achieved with a single-threaded, CPU.  The variation observed in the rate of the gradient calculation.
 
-The gradient calculation is somewhat dependent on the characteristics of the image.  The results of the Georgia Tech football helmet presented in Figure 9 shows the gradient operation requiring 180 ms vs. 276 ms for the fisherman frog image and 225 ms for the leaves image.  Clearly, the original football image in Figure 1 has fewer well-defined edges.  While cropped, the Georgia Tech football image resulted in very few edges from the background and foreground helmets.
+The gradient calculation is somewhat dependent on the characteristics of the image.  The results of the Georgia Tech football helmet presented in Figure ~\ref{fig:gtVS} shows the gradient operation requiring 180 ms vs. 276 ms for the fisherman frog image and 225 ms for the leaves image.  Clearly, the original football image in Figure ~\ref{fig:gtComp} has fewer well-defined edges.  While cropped, the Georgia Tech football image resulted in very few edges from the background and foreground helmets.
 
 \section{Future Considerations}
 
